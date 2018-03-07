@@ -1,0 +1,122 @@
+clear all;
+close all;
+clc;
+
+%% 
+husky_id = 3; % Modify for your Husky
+config = GetHuskyConfig(husky_id);
+client = ['ExampleCdtClient' num2str(int32(rand*1e7))];
+mexmoos('init', 'SERVERHOST', config.host, 'MOOSNAME', client);
+mexmoos('REGISTER', config.laser_channel, 0.0);
+mexmoos('REGISTER', config.stereo_channel, 0.0);
+mexmoos('REGISTER', config.wheel_odometry_channel, 0.0);
+pause(3); 
+
+%%
+initialise_state = [0.0; 0.0; 0.0];
+initialise_covariance = diag([0.01,0.01,0.01]);
+% initialise_goal = [5.0,0.0,0.0]';
+
+statevector = initialise_state;
+covariance = initialise_covariance;
+old_wheel_odometry = [];
+
+while length(old_wheel_odometry)<1
+    mailbox = mexmoos('FETCH');
+    old_wheel_odometry = GetWheelOdometry(mailbox, ...
+                                      config.wheel_odometry_channel, ...
+                                      true);
+end
+
+old_ml = old_wheel_odometry.m_l;
+old_mr = old_wheel_odometry.m_r;
+    
+%initial graphics - plot true map
+map_fig = figure;
+hold on 
+grid off; 
+axis([-5 5 -5 5]);
+% axis equal;
+scatter(statevector(1),statevector(2),'b','x')
+set(gcf,'doublebuffer','on');
+hObsLine = line([0,0],[0,0]);
+set(hObsLine,'linestyle',':');
+
+% statevector_store = zeros(2,1);
+pole_fig = figure;
+
+old_time = 0;
+
+while true
+
+% Fetch latest messages from mex-moos
+mailbox = mexmoos('FETCH');
+laser_scan = GetLaserScans(mailbox, config.laser_channel, true);
+% stereo_images = GetStereoImages(mailbox, config.stereo_channel, true);
+
+new_wheel_odometry = GetWheelOdometry(mailbox, ...
+                                  config.wheel_odometry_channel, ...
+                                  true);
+if ~isempty(new_wheel_odometry)                         
+    new_ml = new_wheel_odometry.m_l;
+    new_mr = new_wheel_odometry.m_r;
+    new_time = new_wheel_odometry.timestamp;
+    timediff = new_time - old_time;
+    old_time = new_time;
+    disp( timediff );
+else
+    new_ml = old_ml;
+    new_mr = old_mr;
+%     disp("Misassignment of wheel odom");
+end
+
+% Get features from laser
+if length(laser_scan)>0
+    observations = getPoleCoords(laser_scan);
+else 
+    observations = [];
+end
+
+figure(pole_fig)
+if length(observations)>0
+    obs_x = observations(1).*cos(observations(2));
+    obs_y = observations(1).*sin(observations(2));
+    scatter(obs_x + statevector(1),obs_y + statevector(2))
+    axis([-5 5 -5 5]);
+end
+hold off
+
+% Get relative motion
+rel_motion = CalculateControlVector( new_ml-old_ml, new_mr-old_mr);
+old_ml = new_ml;
+old_mr= new_mr;
+
+old_sv_length = length(statevector);
+
+% Update using SLAM
+[statevector, covariance] = SLAMUpdate(rel_motion, observations, ...
+    statevector, covariance);
+
+new_sv_length = length(statevector);
+
+% Plot new position
+figure(map_fig)
+scatter(statevector(1),statevector(2), 'b', 'x')
+
+% Plot new features
+if new_sv_length > old_sv_length
+   new_features = (new_sv_length - old_sv_length)/2;
+   
+  for i = 1:new_features
+      xind = old_sv_length + 2*i - 1 ;
+      yind = old_sv_length + 2*i;
+      figure(map_fig)
+      scatter(statevector(xind),statevector(yind))
+  end
+  
+end
+
+clear laser_scan observations;
+pause(0.1)
+
+end
