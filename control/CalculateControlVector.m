@@ -3,7 +3,9 @@ function [ u ] = CalculateControlVector( delta_left, delta_right, L, angular_sli
     
 %     0.535
     
-    L = 0.56;
+%     L = 0.56;
+    L = 0.545;
+    
     % L = 0.15;
     
     % disp('ml', delta_left)

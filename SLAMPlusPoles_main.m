@@ -1,6 +1,7 @@
 clear all;
 close all;
 clc;
+%%
 
 %% 
 husky_id = 3; % Modify for your Husky
@@ -21,7 +22,7 @@ statevector = initialise_state;
 covariance = initialise_covariance;
 old_wheel_odometry = [];
 
-while length(old_wheel_odometry)<1
+while isempty(old_wheel_odometry)
     mailbox = mexmoos('FETCH');
     old_wheel_odometry = GetWheelOdometry(mailbox, ...
                                       config.wheel_odometry_channel, ...
@@ -37,7 +38,7 @@ hold on
 grid off; 
 axis([-5 5 -5 5]);
 % axis equal;
-scatter(statevector(1),statevector(2),'b','x')
+scatter(statevector(2),statevector(1),'b','x')
 set(gcf,'doublebuffer','on');
 hObsLine = line([0,0],[0,0]);
 set(hObsLine,'linestyle',':');
@@ -46,6 +47,8 @@ set(hObsLine,'linestyle',':');
 pole_fig = figure;
 
 old_time = 0;
+FeaturesToPlot = [];
+
 
 while true
 
@@ -57,13 +60,23 @@ laser_scan = GetLaserScans(mailbox, config.laser_channel, true);
 new_wheel_odometry = GetWheelOdometry(mailbox, ...
                                   config.wheel_odometry_channel, ...
                                   true);
+while isempty(new_wheel_odometry) || isempty(laser_scan)
+    mailbox = mexmoos('FETCH');    
+    laser_scan = GetLaserScans(mailbox, config.laser_channel, true);
+    new_wheel_odometry = GetWheelOdometry(mailbox, ...
+                                  config.wheel_odometry_channel, ...
+                                  true);
+%     new_ml = new_wheel_odometry.m_l;
+%     new_mr = new_wheel_odometry.m_r;
+end
+
 if ~isempty(new_wheel_odometry)                         
     new_ml = new_wheel_odometry.m_l;
     new_mr = new_wheel_odometry.m_r;
-    new_time = new_wheel_odometry.timestamp;
-    timediff = new_time - old_time;
-    old_time = new_time;
-    disp( timediff );
+%     new_time = new_wheel_odometry.timestamp;
+%     timediff = new_time - old_time;
+%     old_time = new_time;
+%     disp( timediff );
 else
     new_ml = old_ml;
     new_mr = old_mr;
@@ -71,20 +84,12 @@ else
 end
 
 % Get features from laser
-if length(laser_scan)>0
+if ~isempty(laser_scan)
     observations = getPoleCoords(laser_scan);
 else 
     observations = [];
 end
 
-figure(pole_fig)
-if length(observations)>0
-    obs_x = observations(1).*cos(observations(2));
-    obs_y = observations(1).*sin(observations(2));
-    scatter(obs_x + statevector(1),obs_y + statevector(2))
-    axis([-5 5 -5 5]);
-end
-hold off
 
 % Get relative motion
 rel_motion = CalculateControlVector( new_ml-old_ml, new_mr-old_mr);
@@ -97,24 +102,50 @@ old_sv_length = length(statevector);
 [statevector, covariance] = SLAMUpdate(rel_motion, observations, ...
     statevector, covariance);
 
+
+figure(pole_fig)
+if ~isempty(observations)
+    obs_x = observations(1,:).*cos(observations(2,:));
+    obs_y = observations(1,:).*sin(observations(2,:));
+    theta = statevector(3);
+    obs_worldx = cos(theta)*obs_x -sin(theta)*obs_y;
+    obs_worldy = sin(theta)*obs_x + cos(theta)*obs_y;
+    
+    scatter(obs_worldy + statevector(2),obs_worldx + statevector(1))
+    axis([-5 5 -5 5]);
+end
+hold off
+
+disp(["Current Orientation:  ",statevector(3)*180/pi]);
 new_sv_length = length(statevector);
 
-% Plot new position
-figure(map_fig)
-scatter(statevector(1),statevector(2), 'b', 'x')
+% % Plot new position
+% figure(map_fig)
+% scatter(statevector(1),statevector(2), 'b', 'x')
 
 % Plot new features
 if new_sv_length > old_sv_length
    new_features = (new_sv_length - old_sv_length)/2;
-   
   for i = 1:new_features
       xind = old_sv_length + 2*i - 1 ;
       yind = old_sv_length + 2*i;
-      figure(map_fig)
-      scatter(statevector(xind),statevector(yind))
+      FeaturesToPlot = [FeaturesToPlot;statevector(xind),statevector(yind)];
+%       figure(map_fig)
+%       scatter(statevector(xind),statevector(yind))
   end
-  
 end
+
+if length(statevector)>3
+    figure(map_fig)
+    hold off;
+    scatter(statevector(5:2:end),statevector(4:2:end-1))
+    axis([-5 5 -5 5]);
+    hold on;
+%     DoVehicleGraphics(statevector(1:3),covariance(1:2,1:2),8,[0,1])
+    scatter(statevector(2),statevector(1), 'b', 'x')
+    hold off;
+end
+
 
 clear laser_scan observations;
 pause(0.1)

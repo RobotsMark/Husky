@@ -4,7 +4,8 @@ function [ newFeatures ] = getPoleCoords( scan )
 
 coords = LaserScanToCartesian(scan);
 x = coords(:,1);
-y = -coords(:,2);
+y = coords(:,2);
+% y = -coords(:,2);
 
 refs = scan.reflectances;
 mean_ref = mean(refs);
