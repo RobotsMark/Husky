@@ -12,7 +12,7 @@ channel2Min = 0.500;
 channel2Max = 1.000;
 % Define thresholds for 'Value'
 channel3Min = 0.250;
-channel3Max = 1.000;
+channel3Max = 0.875;
 % Create mask based on chosen histogram thresholds
 BW = ( (I(:,:,1) >= channel1Min) | (I(:,:,1) <= channel1Max) ) & ...
     (I(:,:,2) >= channel2Min ) & (I(:,:,2) <= channel2Max) & ...

@@ -5,25 +5,29 @@ right_x = [];
 left_y = [];
 right_y = [];
 
+% Extracts the logicals for red objects in image
 [BW_left, ~] = createMask(left_image);
 [BW_right, ~] = createMask(right_image);
 
+% Get properties like centers of circles in image
 props_left = regionprops(BW_left, 'all');
 
 thresh = 120;
 for j = 1:size(props_left, 1)
-    if(props_left(j).Area < thresh || ...
+    %     For each circle found, check its orientation
+    if (props_left(j).Area < thresh || ...
             ( ((abs(props_left(j).Orientation) <= 90) && ...
             ((abs(props_left(j).Orientation)) >= 45)) ))
+
         div_Ar_left(j) = NaN;
         continue;
     else
+%         If the area and orientation are good, then fit ellipse
         el_fit = fit_ellipse(props_left(j).PixelList(:,1), props_left(j).PixelList(:,2),target_fig);
         el_Area = pi * (el_fit.long_axis/2) * (el_fit.short_axis / 2);
-        
-        disp(props_left(j).Area);
-        disp(el_Area);
-        
+%         Think could use: 
+%         el_Area = props_left.FilledArea(j)
+     
         div_Ar_left(j) = props_left(j).Area / el_Area;
         if (div_Ar_left(j) < 0.8)
             continue;
@@ -45,10 +49,6 @@ for j = 1:size(props_right, 1)
     else
         el_fit = fit_ellipse(props_right(j).PixelList(:,1), props_right(j).PixelList(:,2));
         el_Area = pi * (el_fit.long_axis/2) * (el_fit.short_axis / 2);
-        disp("");
-        disp(props_right(j).Area);
-        disp(el_Area);
-        
         
         div_Ar_right(j) = props_right(j).Area / el_Area;
         if (div_Ar_right(j) < 0.8)

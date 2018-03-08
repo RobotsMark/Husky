@@ -7,7 +7,7 @@ function sub_goals = path_planner_astar(statevector, goal_position)
 %%%
 
 width=15; %width of the map in meters
-height=20; %height of the map in meters
+height=14; %height of the map in meters
 resolution=10; %cells per meter
 real_width=width*resolution;
 real_height=height*resolution;
@@ -15,8 +15,8 @@ real_height=height*resolution;
 
 
 %%%
-translation_x = 3; %translate the entire map by 10;
-translation_y = 10;
+translation_x = 2; %translate the entire map by 10;
+translation_y = 7;
 translation_matrix=[translation_x, translation_y];
 goal_position=goal_position+translation_matrix;
 
@@ -31,7 +31,7 @@ start_position=statevector(1:2)'+translation_matrix;
 list_of_obstacles = statevector(4:end);
 
 
-start_position=round(start_position*resolution)';
+start_position=round(start_position*resolution);
 goal_position=round(goal_position*resolution);
 
 
@@ -46,9 +46,9 @@ if(isempty(list_of_obstacles))
     number_of_obstacles=0;
 else
     disp("some obstacles");
-    obstacle_x=list_of_obstacles(1:2:end)+translation_x*resolution; %maybe other way round
-    obstacle_y=list_of_obstacles(2:2:end)+translation_y*resolution; %maybe other way round
-    number_of_obstacles=size(obstacle_x, 1); %maybe other way round
+    obstacle_x=list_of_obstacles(1:2:end)+translation_x*resolution; 
+    obstacle_y=list_of_obstacles(2:2:end)+translation_y*resolution;
+    number_of_obstacles=size(obstacle_x, 1);
 end
 
 
@@ -84,6 +84,9 @@ try
         end
     end
 
+catch
+    disp("Circle type error.");
+end
 % 
 % image(grid*20);
 % colorbar;
@@ -93,114 +96,117 @@ try
 %%
 %Astar
 %%%
+try
+    upper_bound=resolution^2*width*height;
 
-upper_bound=resolution^2*width*height;
+    %The set of nodes already evaluated
+    closedSet=false(real_width, real_height);
 
-%The set of nodes already evaluated
-closedSet=false(real_width, real_height);
+    %The set of currently discovered nodes that are not evaluated yet
+    openSet=false(real_width, real_height);
+    openSet(start_position(1), start_position(2))=true;
 
-%The set of currently discovered nodes that are not evaluated yet
-openSet=false(real_width, real_height);
-openSet(start_position(1), start_position(2))=true;
+    %For each node, which node it can most efficiently be reached from.
+    cameFrom=zeros(width*resolution, height*resolution,2);
 
-%For each node, which node it can most efficiently be reached from.
-cameFrom=zeros(width*resolution, height*resolution,2);
+    %For each node, the cost of getting from the start node to that node
+    gScore=ones(real_width, real_height) * (upper_bound);
+    gScore(start_position(1), start_position(2))=0;
 
-%For each node, the cost of getting from the start node to that node
-gScore=ones(real_width, real_height) * (upper_bound);
-gScore(start_position(1), start_position(2))=0;
+    %for each node, the total cost of getting from the start node to the goal by passing by that node
+    fScore=ones(real_width, real_height) * (upper_bound);
 
-%for each node, the total cost of getting from the start node to the goal by passing by that node
-fScore=ones(real_width, real_height) * (upper_bound);
+    fScore(start_position(1), start_position(2))=heuristic(start_position, goal_position);
 
-fScore(start_position(1), start_position(2))=heuristic(start_position, goal_position);
-
-%array to look up node in openSet with the lowest fScore[] value
-%if node is in closedSet its value is set to upper_bound
-fScore_lookup=ones(real_width, real_height) * (upper_bound);
-fScore_lookup(start_position(1), start_position(2))=heuristic(start_position, goal_position);
-
-
-path=[];
-while any(any(openSet))
-
-    [A, ind_1]= min(fScore_lookup); %= the node in openSet having the lowest fScore[] value
-    [~, ind_2]=min(A);
-    current=[ind_1(ind_2), ind_2];
-    %disp(current)
-    
-    if current == goal_position
-        disp("finished");
-        path = reconstruct_path(cameFrom, start_position, goal_position);
-        break;
-    end
-
-    openSet(current(1), current(2))=false;
-    closedSet(current(1), current(2))=true;
-    fScore_lookup(current(1), current(2))=upper_bound;
-
-    
-    for i=-1:1
-        for j=-1:1
-            neighbour = current + [i, j];
-            if (0<neighbour(1)<=real_width && 0<neighbour(2)<=real_height && ~closedSet(neighbour(1), neighbour(2)) && ~(i==0 && j==0) && grid(neighbour(1), neighbour(2))>0)
-
-                openSet(neighbour(1), neighbour(2))=true;
+    %array to look up node in openSet with the lowest fScore[] value
+    %if node is in closedSet its value is set to upper_bound
+    fScore_lookup=ones(real_width, real_height) * (upper_bound);
+    fScore_lookup(start_position(1), start_position(2))=heuristic(start_position, goal_position);
 
 
-                %The distance from start to a neighbor
-                %the "dist_between" function may vary as per the solution requirements.
-                %%%tentative_gScore = gScore(current(1), current(2)) + norm(current - neighbour);
-                tentative_gScore = gScore(current(1), current(2)) + distance_measure(current, neighbour);
+    path=[];
+    while any(any(openSet))
+
+        [A, ind_1]= min(fScore_lookup); %= the node in openSet having the lowest fScore[] value
+        [~, ind_2]=min(A);
+        current=[ind_1(ind_2), ind_2];
+        %disp(current)
+
+        if current == goal_position
+            disp("finished");
+            path = reconstruct_path(cameFrom, start_position, goal_position);
+            break;
+        end
+
+        openSet(current(1), current(2))=false;
+        closedSet(current(1), current(2))=true;
+        fScore_lookup(current(1), current(2))=upper_bound;
 
 
-                if tentative_gScore < gScore(neighbour(1), neighbour(2))
-                    %This path is the best until now. Record it!
+        for i=-1:1
+            for j=-1:1
+                neighbour = current + [i, j];
+                if (0<neighbour(1)<=real_width && 0<neighbour(2)<=real_height && ~closedSet(neighbour(1), neighbour(2)) && ~(i==0 && j==0) && grid(neighbour(1), neighbour(2))>0)
 
-                    cameFrom(neighbour(1), neighbour(2), 1) = current(1);
-                    cameFrom(neighbour(1), neighbour(2), 2) = current(2);
-                    
-                    gScore(neighbour(1), neighbour(2)) = tentative_gScore;
-                    fScore(neighbour(1), neighbour(2)) = gScore(neighbour(1), neighbour(2)) + heuristic(neighbour, goal_position);
-                    fScore_lookup(neighbour(1), neighbour(2))=fScore(neighbour(1), neighbour(2));
+                    openSet(neighbour(1), neighbour(2))=true;
+
+
+                    %The distance from start to a neighbor
+                    %the "dist_between" function may vary as per the solution requirements.
+                    %%%tentative_gScore = gScore(current(1), current(2)) + norm(current - neighbour);
+                    tentative_gScore = gScore(current(1), current(2)) + distance_measure(current, neighbour);
+
+
+                    if tentative_gScore < gScore(neighbour(1), neighbour(2))
+                        %This path is the best until now. Record it!
+
+                        cameFrom(neighbour(1), neighbour(2), 1) = current(1);
+                        cameFrom(neighbour(1), neighbour(2), 2) = current(2);
+
+                        gScore(neighbour(1), neighbour(2)) = tentative_gScore;
+                        fScore(neighbour(1), neighbour(2)) = gScore(neighbour(1), neighbour(2)) + heuristic(neighbour, goal_position);
+                        fScore_lookup(neighbour(1), neighbour(2))=fScore(neighbour(1), neighbour(2));
+                    end
                 end
             end
         end
+
+
+
+    %end while    
     end
-
-
-
-%end while    
+catch
+    disp("Problem in huge while loop.")
 end
 
-
-
 %%   find the path
+try
+    for i=1:size(path(), 1)
+        x=path(i, 1);
+        y=path(i, 2);
+        grid(x, y)=5;
+    end %end for
 
-for i=1:size(path(), 1)
-    x=path(i, 1);
-    y=path(i, 2);
-    grid(x, y)=5;
-end %end for
+    figure(3)
+    image(grid*20)
+    colorbar;
 
-figure(3)
-image(grid*20)
-colorbar;
-
-path=flipud(path);
-
+    path=flipud(path);
+catch
+    disp("Problem finding path.")
+end
 
 %% turn path into subgoals
 
-sub_goals=path(resolution/2:resolution/2:end, :);
-sub_goals=sub_goals/resolution-translation_matrix;
-disp(sub_goals);
+try
+    sub_goals=path(resolution/2:resolution/2:end, :);
+    sub_goals=sub_goals/resolution-translation_matrix;
+    disp(sub_goals);
+catch
+    disp("Problem turning path into subgoals.")
+end
 
 %%
-
-catch
-    disp("ERROR!");
-end
 
 end
 %end function

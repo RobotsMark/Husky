@@ -1,7 +1,6 @@
 clear all;
 close all;
 clc;
-%%
 
 %% 
 husky_id = 3; % Modify for your Husky
@@ -34,6 +33,7 @@ while isempty(old_wheel_odometry)
                                       true);
     old_ml = old_wheel_odometry.m_l;
     old_mr = old_wheel_odometry.m_r;
+    
 end
 
 %% initial graphics - plot true map
@@ -51,6 +51,8 @@ set(hObsLine,'linestyle',':');
 target_fig = figure;
 
 loop_counter = 1;
+distance_from_origin = 0;
+
 %%
 while true
     
@@ -62,12 +64,18 @@ stereo_images = GetStereoImages(mailbox, config.stereo_channel, true);
 new_wheel_odometry = GetWheelOdometry(mailbox, ...
                                   config.wheel_odometry_channel, ...
                                   true);
+                              
 while isempty(new_wheel_odometry) || isempty(laser_scan)
     mailbox = mexmoos('FETCH');    
     laser_scan = GetLaserScans(mailbox, config.laser_channel, true);
     new_wheel_odometry = GetWheelOdometry(mailbox, ...
                                   config.wheel_odometry_channel, ...
                                   true);
+    
+    % Sometimes wheel odometry returns zeros (!!) - Fetch again when this happens                          
+    if and(and(distance_from_origin > 0, new_wheel_odometry.m_l == 0),new_wheel_odometry.m_l == 0 )
+         new_wheel_odometry = [];
+    end                              
 end
 
 % Get features from laser and wheel odom
@@ -85,6 +93,11 @@ old_sv_length = length(statevector);
 [statevector, covariance] = SLAMUpdate(rel_motion, observations, ...
     statevector, covariance);
 new_sv_length = length(statevector);
+distance_from_origin = norm(statevector(1:2));
+
+if abs(statevector(1))> 10 || abs(statevector(2))> 10
+    disp("Statevector out of bounds");
+end
 %%
 
 if and(phase ==1 || phase ==2,and(~isempty(stereo_images),mod(loop_counter,10)==0))
@@ -99,21 +112,23 @@ if and(phase ==1 || phase ==2,and(~isempty(stereo_images),mod(loop_counter,10)==
                 xtarget_world = cos(world_theta)*xtarget_rob -sin(world_theta)*ytarget_rob;
                 ytarget_world = sin(world_theta)*xtarget_rob + cos(world_theta)*ytarget_rob;
 
-                if and(and(xtarget_world>2,xtarget_world <8),abs(ytarget_world)<5)
+                if and(and(xtarget_world>4,xtarget_world <8),abs(ytarget_world)<5)
                     goal_position = [xtarget_world,ytarget_world];
                     phase = 2;
                 end
             end
 end
         
-
+%  When close to target, lock on and stop trying to refine it
 if and(phase ==2, norm(statevector(1:2) - goal_position') < 2)
     phase = 3;
 end
 
-if phase~=5
+
+if phase~=5 % If not in final turning stage
+   
    subgoals_position=path_planner_astar(statevector, goal_position);
-   if isempty(subgoals_position)
+   if isempty(subgoals_position) % Returns empty when reach goal
        if phase ==3
            goal_position = [0,0];
            subgoals_position=path_planner_astar(statevector, goal_position);
@@ -149,6 +164,7 @@ else
     while pi - abs(world_angle) > 0.09 % this is 5 degrees
         SendSpeedCommand(0, sign(world_angle), config.control_channel);
     end
+    break;
 end
     
 
@@ -180,3 +196,5 @@ clear laser_scan observations;
 pause(0.1)
 loop_counter = loop_counter + 1;
 end
+
+disp("Challenge complete!");

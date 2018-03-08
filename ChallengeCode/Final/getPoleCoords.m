@@ -1,35 +1,32 @@
 function [ newFeatures ] = getPoleCoords( scan )
-%UNTITLED5 Summary of this function goes here
-%   Detailed explanation goes here
+% Uses thresholding and clustering to determine the range and bearing to 
+% centres of obstacles/poles in laser scan data from the robot
+%   input:  scan - laser scan from robot
+%   output: newFeatures - this is an array of [range, bearing] for 
+%           each pole found in the scan
 
+% Mark Finean
+% March 2018
+
+% Get x,y coords in laser frame
 coords = LaserScanToCartesian(scan);
 x = coords(:,1);
 y = coords(:,2);
-% y = -coords(:,2);
 
+% Thresholding on reflectance
 refs = scan.reflectances;
-mean_ref = mean(refs);
-% mean_ref = 640;
-% ref_threshold = max([800,0.65*max(refs)]);
 ref_threshold = max([750,0.65*max(refs)]);
 ref_mask = refs>ref_threshold;
 x = x(ref_mask);
 y = y(ref_mask);
 filtered_refs = refs(ref_mask);
 
+% Clustering
 Y = pdist([x,y],'cityblock');
 if ~isempty(Y)
     Z = linkage(Y,'average');
-    T = cluster(Z,'cutoff',0.10, 'criterion', 'distance');
-    % 
-    % figure(2)
-    % scatter(x, y, 10, T , 'filled')
-    % hold on;
-
-    clusterNum = [];
-    residual = [];
-    cluster_mean_ref = [];
-    outputCoords = [];
+    T = cluster(Z,'cutoff',0.10, 'criterion', 'distance'); % Find 10cm diameter clusters
+    
     newFeatures = [];
 
     for i = 1:1:max(T)
@@ -52,21 +49,9 @@ if ~isempty(Y)
 %             Convert to centre of robot frame
             feature_x = new_centre(1) + 0.99/2;
             feature_y = new_centre(2);
-    %         hold on;
-    %         circle(new_centre(1),new_centre(2),0.06)
-
-    % %       Transform into frame with centre of robot  
-
-    %         clusterNum = [clusterNum; i];
-    %         residual = [residual;avg_res];
-    %         cluster_mean_ref = [cluster_mean_ref; mean(filtered_refs(mask))];
             range = sqrt(feature_x.^2 + feature_y.^2);
             bearing = atan2(feature_y,feature_x);
-%             bearing = atan(new_centre);
-            
-            outputCoords = [range, bearing ];
-    %         outputCoords = [outputCoords; new_centre ];
-            newFeatures = [newFeatures;outputCoords];
+            newFeatures = [newFeatures; range, bearing];
         end
     end
     
