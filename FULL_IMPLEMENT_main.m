@@ -13,13 +13,18 @@ mexmoos('REGISTER', config.stereo_channel, 0.0);
 mexmoos('REGISTER', config.wheel_odometry_channel, 0.0);
 pause(3); 
 
-%%
+%% Initialise params
 initialise_state = [0.0; 0.0; 0.0];
 initialise_covariance = diag([0.01,0.01,0.01]);
 % initialise_goal = [5.0,0.0,0.0]';
 
 statevector = initialise_state;
 covariance = initialise_covariance;
+goal_position=[5,0];
+update_subgoal=true;
+phase = true; 
+
+FeaturesToPlot = [];
 old_wheel_odometry = [];
 
 while isempty(old_wheel_odometry)
@@ -27,35 +32,32 @@ while isempty(old_wheel_odometry)
     old_wheel_odometry = GetWheelOdometry(mailbox, ...
                                       config.wheel_odometry_channel, ...
                                       true);
+    old_ml = old_wheel_odometry.m_l;
+    old_mr = old_wheel_odometry.m_r;
 end
 
-old_ml = old_wheel_odometry.m_l;
-old_mr = old_wheel_odometry.m_r;
-    
-%initial graphics - plot true map
+%% initial graphics - plot true map
 map_fig = figure;
 hold on 
 grid off; 
 axis([-5 5 -5 5]);
 % axis equal;
-scatter(statevector(1),statevector(2),'b','x')
+scatter(statevector(2),statevector(1),'b','x')
 set(gcf,'doublebuffer','on');
 hObsLine = line([0,0],[0,0]);
 set(hObsLine,'linestyle',':');
 
-% statevector_store = zeros(2,1);
-pole_fig = figure;
 
-old_time = 0;
-FeaturesToPlot = [];
+target_fig = figure;
 
-
+loop_counter = 1;
+%%
 while true
-
+    
 % Fetch latest messages from mex-moos
 mailbox = mexmoos('FETCH');
 laser_scan = GetLaserScans(mailbox, config.laser_channel, true);
-% stereo_images = GetStereoImages(mailbox, config.stereo_channel, true);
+stereo_images = GetStereoImages(mailbox, config.stereo_channel, true);
 
 new_wheel_odometry = GetWheelOdometry(mailbox, ...
                                   config.wheel_odometry_channel, ...
@@ -102,26 +104,71 @@ old_sv_length = length(statevector);
 [statevector, covariance] = SLAMUpdate(rel_motion, observations, ...
     statevector, covariance);
 
-
-figure(pole_fig)
-if ~isempty(observations)
-    obs_x = observations(1,:).*cos(observations(2,:));
-    obs_y = observations(1,:).*sin(observations(2,:));
-    theta = statevector(3);
-    obs_worldx = cos(theta)*obs_x -sin(theta)*obs_y;
-    obs_worldy = sin(theta)*obs_x + cos(theta)*obs_y;
+if and(phase = true, and(~isempty(stereo_images),mod(loop_counter,10)==0))
+    figure(target_fig)
+    hold on;
+    imshow(stereo_images(end).left.rgb)
+    [xtarget_rob, ytarget_rob] = dist_from_target(stereo_images(end).left.rgb, stereo_images(end).right.rgb,target_fig);
+    hold off;
     
-    scatter(obs_worldx + statevector(1),(obs_worldy + statevector(2)))
-    axis([-5 5 -5 5]);
+    if ~isempty(xtarget_rob)
+        world_theta = statevector(3);
+        xtarget_world = cos(world_theta)*xtarget_rob -sin(world_theta)*ytarget_rob;
+        ytarget_world = sin(world_theta)*xtarget_rob + cos(world_theta)*ytarget_rob;
+
+        if and(and(xtarget_world>5,xtarget_world <8),abs(ytarget_world)<5)
+            goal_position = [xtarget_world,ytarget_world];
+        end
+    end
 end
-hold off
 
-disp(["Current Orientation:  ",statevector(3)*180/pi]);
+if(statevector(1)>5.5)
+   subgoal_position=goal_position;
+elseif(update_subgoal)
+   subgoals_position=path_planner_astar(statevector, goal_position);
+   if isempty(subgoals_position)
+       goal_position = [0,0];
+       subgoals_position=path_planner_astar(statevector, goal_position);
+       phase = false;
+   end
+   subgoal_position=subgoals_position(1,:);
+   update_subgoal=true;
+end
+
+velocity_angle=get_velocity_and_angle_radiant(statevector(1:2)', ...
+    subgoal_position, statevector(3));
+
+relative_angle=velocity_angle(2);
+distance=velocity_angle(3);
+clockwise=velocity_angle(4);
+
+epsilon_angle=pi/30;
+epsilon_distance=0.05;
+
+if(abs(relative_angle)>epsilon_angle)
+    SendSpeedCommand(0, clockwise, config.control_channel);
+elseif(distance>epsilon_distance)
+    SendSpeedCommand(1, 0, config.control_channel);
+else
+    SendSpeedCommand(0, 0, config.control_channel);
+    update_subgoal=true;
+end
+
+
+% figure(pole_fig)
+% if ~isempty(observations)
+%     obs_x = observations(1,:).*cos(observations(2,:));
+%     obs_y = observations(1,:).*sin(observations(2,:));
+%     theta = statevector(3);
+%     obs_worldx = cos(theta)*obs_x -sin(theta)*obs_y;
+%     obs_worldy = sin(theta)*obs_x + cos(theta)*obs_y;
+%     
+%     scatter(obs_worldy + statevector(2),obs_worldx + statevector(1))
+%     axis([-5 5 -5 5]);
+% end
+% hold off
+
 new_sv_length = length(statevector);
-
-% Plot new position
-figure(map_fig)
-scatter(statevector(1),statevector(2), 'b', 'x')
 
 % Plot new features
 if new_sv_length > old_sv_length
@@ -130,13 +177,24 @@ if new_sv_length > old_sv_length
       xind = old_sv_length + 2*i - 1 ;
       yind = old_sv_length + 2*i;
       FeaturesToPlot = [FeaturesToPlot;statevector(xind),statevector(yind)];
-%       figure(map_fig)
-%       scatter(statevector(xind),statevector(yind))
   end
 end
 
-scatter(FeaturesToPlot)
+if length(statevector)>3
+    figure(map_fig)
+    hold off;
+    scatter(statevector(5:2:end),statevector(4:2:end-1))
+    axis([-5 5 -5 5]);
+    hold on;
+    scatter(statevector(2),statevector(1), 'r', 'x')
+    h = PlotEllipse(statevector,covariance,1);
+    if(~isempty(h))
+        set(h,'color','r');
+    end
+    hold off;
+end
+
 clear laser_scan observations;
 pause(0.1)
-
+loop_counter = loop_counter + 1;
 end

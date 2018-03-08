@@ -48,7 +48,7 @@ function [z] = SLAMDataAssociations(x, z_raw)
       
       closest_distance = min(dist_mapfeature_to_z_i);
       %disp(closest_distance)
-      if norm(closest_distance) <0.5
+      if norm(closest_distance) <0.4
           nearest_neighbour_index = find(dist_mapfeature_to_z_i == closest_distance);
           feature_ids(i) = nearest_neighbour_index(1); % use first element found (there might be more than one of them)     
       end

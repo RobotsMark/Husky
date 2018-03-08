@@ -21,6 +21,8 @@ function [ ] = SendSpeedCommand( vel, omega, moos_channel )
 % Mobile Robotics Group, Oxford University.
 
 % set constants (replicated in Husky driver)
+% max_vel = 0.5;
+% max_omega = 0.5;
 max_vel = 0.5;
 max_omega = 0.5;
 
