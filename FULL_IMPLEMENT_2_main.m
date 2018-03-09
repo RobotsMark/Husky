@@ -19,7 +19,7 @@ initialise_covariance = diag([0.01,0.01,0.01]);
 
 statevector = initialise_state;
 covariance = initialise_covariance;
-goal_position=[5,0];
+goal_position=[6,0];
 update_subgoal=true;
 phase = 1; 
 
@@ -40,7 +40,7 @@ end
 map_fig = figure;
 hold on 
 grid off; 
-axis([-5 5 -5 5]);
+axis([-7 7 -7 7]);
 % axis equal;
 scatter(statevector(2),statevector(1),'b','x')
 set(gcf,'doublebuffer','on');
@@ -52,7 +52,8 @@ target_fig = figure;
 
 loop_counter = 1;
 distance_from_origin = 0;
-
+distance_to_goal = goal_position(1);
+fail_count = 0;
 %%
 while true
     
@@ -73,9 +74,11 @@ while isempty(new_wheel_odometry) || isempty(laser_scan)
                                   true);
     
     % Sometimes wheel odometry returns zeros (!!) - Fetch again when this happens                          
-    if and(and(distance_from_origin > 0, new_wheel_odometry.m_l == 0),new_wheel_odometry.m_l == 0 )
+    if ~isempty(new_wheel_odometry)
+        if and(and(distance_from_origin > 0, new_wheel_odometry.m_l == 0),new_wheel_odometry.m_l == 0 )
          new_wheel_odometry = [];
-    end                              
+        end 
+    end
 end
 
 % Get features from laser and wheel odom
@@ -94,7 +97,7 @@ old_sv_length = length(statevector);
     statevector, covariance);
 new_sv_length = length(statevector);
 distance_from_origin = norm(statevector(1:2));
-
+distance_to_goal = norm(statevector(1:2)' - goal_position);
 if abs(statevector(1))> 10 || abs(statevector(2))> 10
     disp("Statevector out of bounds");
 end
@@ -111,8 +114,11 @@ if and(phase ==1 || phase ==2,and(~isempty(stereo_images),mod(loop_counter,10)==
                 world_theta = statevector(3);
                 xtarget_world = cos(world_theta)*xtarget_rob -sin(world_theta)*ytarget_rob;
                 ytarget_world = sin(world_theta)*xtarget_rob + cos(world_theta)*ytarget_rob;
-
-                if and(and(xtarget_world>4,xtarget_world <8),abs(ytarget_world)<5)
+                xtarget_world = xtarget_world + statevector(1);
+                ytarget_world = ytarget_world + statevector(2);
+                
+                if and(and(xtarget_world>5,xtarget_world <8),abs(ytarget_world)<5)
+                    disp("Updating goal to target.")
                     goal_position = [xtarget_world,ytarget_world];
                     phase = 2;
                 end
@@ -121,6 +127,7 @@ end
         
 %  When close to target, lock on and stop trying to refine it
 if and(phase ==2, norm(statevector(1:2) - goal_position') < 2)
+    disp("Entering phase 3.")
     phase = 3;
 end
 
@@ -129,11 +136,30 @@ if phase~=5 % If not in final turning stage
    
    subgoals_position=path_planner_astar(statevector, goal_position);
    if isempty(subgoals_position) % Returns empty when reach goal
-       if phase ==3
-           goal_position = [0,0];
+       
+       if phase ==1
+           fail_count = fail_count + 1;
+           if fail_count>2
+               phase = 4;
+               goal_position = [0,0];
+               disp("Couldn't find target. Returning home.")
+           elseif fail_count ==1
+               goal_position = [6,-1];
+           elseif fail_count == 2
+               goal_position = [6,1];
+           end
+           
            subgoals_position=path_planner_astar(statevector, goal_position);
-           phase = 4;
+            
+       end
+       
+       if phase ==3 && distance_to_goal <0.1
+            disp("Updating goal to start position.")
+            goal_position = [0,0];
+            subgoals_position=path_planner_astar(statevector, goal_position);
+            phase = 4;
        elseif phase == 4 
+            disp("Entering phase 5.")
             phase = 5;
        end     
    end
@@ -153,7 +179,7 @@ if phase~=5 % If not in final turning stage
        if(abs(relative_angle)>epsilon_angle)
             SendSpeedCommand(0, clockwise, config.control_channel);
        elseif(distance>epsilon_distance)
-            SendSpeedCommand(1, 0, config.control_channel);
+            SendSpeedCommand(1.0, 0, config.control_channel);
        else
             SendSpeedCommand(0, 0, config.control_channel);
        end
@@ -182,7 +208,7 @@ if length(statevector)>3
     figure(map_fig)
     hold off;
     scatter(statevector(5:2:end),statevector(4:2:end-1))
-    axis([-5 5 -5 5]);
+    axis([-7 7 -7 7]);
     hold on;
     scatter(statevector(2),statevector(1), 'r', 'x')
     h = PlotEllipse(statevector,covariance,1);

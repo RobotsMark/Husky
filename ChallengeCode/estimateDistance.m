@@ -1,4 +1,4 @@
-function [z, x, z_correct, x_correct, d, theta] = estimateDistance(lx, rx)
+function [z, x, z_correct, d, theta] = estimateDistance(lx, rx)
     % See figure at bottom for details http://www.dis.uniroma1.it/~iocchi/stereo/triang.html
     
     % Input 
@@ -9,7 +9,6 @@ function [z, x, z_correct, x_correct, d, theta] = estimateDistance(lx, rx)
     %   z - forward coord of target from camera
     %   z_correct - forward coord from center of robot
     %   x - sideways coord of target from camera
-    %   x_correct - sideways coord from center of robot
     %   d - target distance from robot
     %   theta - angle from robot 
     
@@ -40,19 +39,13 @@ function [z, x, z_correct, x_correct, d, theta] = estimateDistance(lx, rx)
     % husky correction
     z_correct = z_correct + 0.544/2;
     
-    % x correction
-    if x > h
-        x_correct = sqrt(x^2 - h^2);
-    else
-        x_correct = 0; 
-    end  
     
     % distance to target
-    d = sqrt(z_correct^2 + x_correct^2);
+    d = sqrt(z_correct^2 + x^2);
     
     % angle of target relative to camera facing
-    if z_correct > 0 & x_correct > 0 
-        theta = atan(x_correct/z_correct);
+    if z_correct > 0 && x > 0 
+        theta = atan(x/z_correct);
     elseif z > 0
         theta = atan(x/z);
     else

@@ -1,4 +1,4 @@
-function [left_x, left_y, right_x, right_y] = locate_red_t(left_image, right_image,target_fig)
+function [left_x, left_y, right_x, right_y] = locate_red_t(left_image, right_image,fig_handle)
 
 left_x = [];
 right_x = [];
@@ -18,7 +18,7 @@ for j = 1:size(props_left, 1)
         div_Ar_left(j) = NaN;
         continue;
     else
-        el_fit = fit_ellipse(props_left(j).PixelList(:,1), props_left(j).PixelList(:,2),target_fig);
+        el_fit = fit_ellipse(props_left(j).PixelList(:,1), props_left(j).PixelList(:,2),fig_handle);
         el_Area = pi * (el_fit.long_axis/2) * (el_fit.short_axis / 2);
         if isempty(el_Area)
             div_Ar_left(j) = NaN;
@@ -43,7 +43,7 @@ for j = 1:size(props_right, 1)
         div_Ar_right(j) = NaN;        
         continue;
     else
-        el_fit = fit_ellipse(props_right(j).PixelList(:,1), props_right(j).PixelList(:,2));
+        el_fit = fit_ellipse(props_right(j).PixelList(:,1), props_right(j).PixelList(:,2),fig_handle);
         el_Area = pi * (el_fit.long_axis/2) * (el_fit.short_axis / 2);
         if isempty(el_Area)
             div_Ar_right(j) = NaN;

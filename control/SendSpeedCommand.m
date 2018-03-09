@@ -23,8 +23,8 @@ function [ ] = SendSpeedCommand( vel, omega, moos_channel )
 % set constants (replicated in Husky driver)
 % max_vel = 0.5;
 % max_omega = 0.5;
-max_vel = 0.5;
-max_omega = 0.5;
+max_vel = 1.0;
+max_omega = 1.0;
 
 % verify inputs
 if (~(isnumeric(vel) && isscalar(vel) &&~isempty(vel)))

@@ -24,7 +24,8 @@ goal_position=goal_position+translation_matrix;
 
 
 
-radius=round(resolution/2.8);
+% radius=round(resolution/2);
+radius=6;
 
 
 start_position=statevector(1:2)'+translation_matrix;
@@ -40,12 +41,12 @@ list_of_obstacles=round(list_of_obstacles*resolution);
 
 
 if(isempty(list_of_obstacles))
-    disp("no obstacles");
+%     disp("no obstacles");
     obstacle_x=[];
     obstacle_y=[];
     number_of_obstacles=0;
 else
-    disp("some obstacles");
+%     disp("some obstacles");
     obstacle_x=list_of_obstacles(1:2:end)+translation_x*resolution; 
     obstacle_y=list_of_obstacles(2:2:end)+translation_y*resolution;
     number_of_obstacles=size(obstacle_x, 1);
@@ -133,7 +134,7 @@ try
         %disp(current)
 
         if current == goal_position
-            disp("finished");
+%             disp("finished");
             path = reconstruct_path(cameFrom, start_position, goal_position);
             break;
         end
@@ -199,9 +200,14 @@ end
 %% turn path into subgoals
 
 try
-    sub_goals=path(resolution/2:resolution/2:end, :);
+    if and(1<=size(path,1),size(path,1)<5)
+        sub_goals = path(end,:);
+    else
+        sub_goals=path(resolution/2:resolution/2:end, :);
+    end
+   
     sub_goals=sub_goals/resolution-translation_matrix;
-    disp(sub_goals);
+%     disp(sub_goals);
 catch
     disp("Problem turning path into subgoals.")
 end
